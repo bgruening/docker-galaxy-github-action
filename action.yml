@@ -87,19 +87,18 @@ runs:
         else
           IMAGE="$REPOSITORY"
         fi
-        mapfile -t TAG_LIST < <(python - <<'PY'
-import os
-raw = os.environ.get("TAGS_INPUT", "")
-seen = {}
-for part in raw.replace(",", "\n").splitlines():
-    tag = part.strip()
-    if tag:
-        seen[tag] = None
-if not seen:
-    seen["latest"] = None
-print("\n".join(seen.keys()))
-PY
-)
+        mapfile -t TAG_LIST < <(python -c '
+        import os
+        raw = os.environ.get("TAGS_INPUT", "")
+        seen = []
+        for part in raw.replace(",", "\n").splitlines():
+            tag = part.strip()
+            if tag and tag not in seen:
+                seen.append(tag)
+        if not seen:
+            seen.append("latest")
+        print("\n".join(seen))
+        ')
         TAG_ARGS=""
         FULL_TAGS=()
         for tag in "${TAG_LIST[@]}"; do
