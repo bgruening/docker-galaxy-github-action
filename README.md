@@ -1,10 +1,10 @@
-# Build and push Galaxy NGS image (composite action)
+# Build and push Galaxy Docker flavors via GitHub actions
 
-Composite GitHub Action that builds the Galaxy NGS preprocessing container from this repo and optionally pushes it to a registry. The action wires up the build args for the tools YAML and the base Galaxy image so they can be overridden per workflow.
+GitHub Action that builds the Galaxy Docker flavors and optionally pushes it to a Docker registry.
 
 ## Inputs
 - `repository` (required): Image repository, e.g. `username/galaxy-ngs`.
-- `registry` (default `docker.io`): Registry hostname (e.g. `ghcr.io`).
+- `registry` (default `docker.io`): Registry hostname (e.g. `ghcr.io` or `quay.io`).
 - `tags` (default `latest`): Tags to apply, comma or newline separated.
 - `tool-file` (default `ngs_preprocessing.yml`): Tools YAML passed as build arg `TOOL_FILE`.
 - `base-image` (default `quay.io/bgruening/galaxy:25.1.1`): Base Galaxy image passed as build arg `BASE_IMAGE`.
