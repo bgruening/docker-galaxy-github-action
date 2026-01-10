@@ -1,0 +1,152 @@
+name: "Build and push Galaxy NGS image"
+description: "Build the Galaxy NGS preprocessing container and optionally push it to a registry with configurable tools file and base image."
+inputs:
+  repository:
+    description: "Image repository (e.g., username/galaxy-ngs)."
+    required: true
+  registry:
+    description: "Container registry hostname (e.g., docker.io, ghcr.io)."
+    default: "docker.io"
+  tags:
+    description: "Tags to apply (comma or newline separated)."
+    default: "latest"
+  tool-file:
+    description: "Path to the Galaxy tools YAML passed as build arg TOOL_FILE."
+    default: "ngs_preprocessing.yml"
+  base-image:
+    description: "Base Galaxy image passed as build arg BASE_IMAGE."
+    default: "quay.io/bgruening/galaxy:25.1.1"
+  context:
+    description: "Docker build context."
+    default: "."
+  dockerfile:
+    description: "Path to Dockerfile."
+    default: "Dockerfile"
+  build-args:
+    description: "Additional build args (KEY=VALUE, comma or newline separated)."
+    required: false
+  push:
+    description: "Push image to registry (true/false)."
+    default: "true"
+  username:
+    description: "Registry username (required when push=true)."
+    required: false
+  password:
+    description: "Registry password or token (required when push=true)."
+    required: false
+  provenance:
+    description: "Enable provenance attestation if supported."
+    default: "false"
+outputs:
+  image:
+    description: "Image name without tag."
+    value: ${{ steps.meta.outputs.image }}
+  tags:
+    description: "Full image tags built/pushed."
+    value: ${{ steps.meta.outputs.tags }}
+runs:
+  using: "composite"
+  steps:
+    - name: Validate inputs
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [[ -z "${{ inputs.repository }}" ]]; then
+          echo "Input 'repository' is required" >&2
+          exit 1
+        fi
+        if [[ "${{ inputs.push }}" == "true" ]]; then
+          if [[ -z "${{ inputs.username }}" || -z "${{ inputs.password }}" ]]; then
+            echo "Inputs 'username' and 'password' are required when push=true" >&2
+            exit 1
+          fi
+        fi
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to registry
+      if: inputs.push == 'true'
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ inputs.registry }}
+        username: ${{ inputs.username }}
+        password: ${{ inputs.password }}
+
+    - name: Prepare metadata
+      id: meta
+      shell: bash
+      env:
+        TAGS_INPUT: ${{ inputs.tags }}
+        REGISTRY: ${{ inputs.registry }}
+        REPOSITORY: ${{ inputs.repository }}
+      run: |
+        set -euo pipefail
+        if [[ -n "$REGISTRY" ]]; then
+          IMAGE="$REGISTRY/$REPOSITORY"
+        else
+          IMAGE="$REPOSITORY"
+        fi
+        mapfile -t TAG_LIST < <(python - <<'PY'
+import os
+raw = os.environ.get("TAGS_INPUT", "")
+seen = {}
+for part in raw.replace(",", "\n").splitlines():
+    tag = part.strip()
+    if tag:
+        seen[tag] = None
+if not seen:
+    seen["latest"] = None
+print("\n".join(seen.keys()))
+PY
+)
+        TAG_ARGS=""
+        FULL_TAGS=()
+        for tag in "${TAG_LIST[@]}"; do
+          TAG_ARGS+=" -t ${IMAGE}:${tag}"
+          FULL_TAGS+=("${IMAGE}:${tag}")
+        done
+        echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+        echo "tags=${FULL_TAGS[*]}" >> "$GITHUB_OUTPUT"
+        echo "tag_args=${TAG_ARGS}" >> "$GITHUB_OUTPUT"
+
+    - name: Build and push image
+      shell: bash
+      env:
+        DOCKER_BUILDKIT: "1"
+        PUSH: ${{ inputs.push }}
+        TOOL_FILE: ${{ inputs["tool-file"] }}
+        BASE_IMAGE: ${{ inputs["base-image"] }}
+        PROVENANCE: ${{ inputs.provenance }}
+        BUILD_ARGS_EXTRA: ${{ inputs["build-args"] }}
+        TAG_ARGS: ${{ steps.meta.outputs.tag_args }}
+      run: |
+        set -euo pipefail
+        OUTPUT_FLAG="--push"
+        if [[ "$PUSH" != "true" ]]; then
+          OUTPUT_FLAG="--load"
+        fi
+
+        PROVENANCE_OPT=""
+        if [[ "$PROVENANCE" == "true" ]]; then
+          PROVENANCE_OPT="--provenance=true"
+        fi
+
+        EXTRA_ARGS=()
+        if [[ -n "$BUILD_ARGS_EXTRA" ]]; then
+          while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
+            line="${line%,}"
+            EXTRA_ARGS+=(--build-arg "$line")
+          done < <(printf '%s\n' "${BUILD_ARGS_EXTRA//,/\\n}")
+        fi
+
+        docker buildx build \
+          --file "${{ inputs.dockerfile }}" \
+          --build-arg TOOL_FILE="${TOOL_FILE}" \
+          --build-arg BASE_IMAGE="${BASE_IMAGE}" \
+          "${EXTRA_ARGS[@]}" \
+          ${OUTPUT_FLAG} \
+          ${PROVENANCE_OPT} \
+          ${TAG_ARGS} \
+          "${{ inputs.context }}"
