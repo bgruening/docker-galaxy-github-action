@@ -49,14 +49,19 @@ runs:
   steps:
     - name: Validate inputs
       shell: bash
+      env:
+        INPUT_REPOSITORY: ${{ inputs.repository }}
+        INPUT_PUSH: ${{ inputs.push }}
+        INPUT_USERNAME: ${{ inputs.username }}
+        INPUT_PASSWORD: ${{ inputs.password }}
       run: |
-        set -euo pipefail
-        if [[ -z "${{ inputs.repository }}" ]]; then
+        set -eo pipefail
+        if [[ -z "${INPUT_REPOSITORY:-}" ]]; then
           echo "Input 'repository' is required" >&2
           exit 1
         fi
-        if [[ "${{ inputs.push }}" == "true" ]]; then
-          if [[ -z "${{ inputs.username }}" || -z "${{ inputs.password }}" ]]; then
+        if [[ "${INPUT_PUSH:-false}" == "true" ]]; then
+          if [[ -z "${INPUT_USERNAME:-}" || -z "${INPUT_PASSWORD:-}" ]]; then
             echo "Inputs 'username' and 'password' are required when push=true" >&2
             exit 1
           fi
