@@ -114,10 +114,10 @@ runs:
       env:
         DOCKER_BUILDKIT: "1"
         PUSH: ${{ inputs.push }}
-        TOOL_FILE: ${{ inputs["tool-file"] }}
-        BASE_IMAGE: ${{ inputs["base-image"] }}
+        TOOL_FILE: ${{ inputs['tool-file'] }}
+        BASE_IMAGE: ${{ inputs['base-image'] }}
         PROVENANCE: ${{ inputs.provenance }}
-        BUILD_ARGS_EXTRA: ${{ inputs["build-args"] }}
+        BUILD_ARGS_EXTRA: ${{ inputs['build-args'] }}
         TAG_ARGS: ${{ steps.meta.outputs.tag_args }}
       run: |
         set -euo pipefail
