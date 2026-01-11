@@ -19,23 +19,50 @@ GitHub Action that builds the Galaxy Docker flavors and optionally pushes it to 
 Example workflow job that builds and pushes to Docker Hub:
 
 ```yaml
+env:
+  IMAGE_REGISTRY: quay.io
+  IMAGE_REPOSITORY: bgruening/galaxy-ngs-preprocessing
+  GALAXY_BASE_IMAGE: quay.io/bgruening/galaxy:25.1
+  TOOL_FILE: ngs_preprocessing.yml
+
 jobs:
   build:
+    if: github.event_name != 'release'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Build and push
-        uses: ./action
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build image (no push)
+        uses: bgruening/docker-galaxy-github-action@v1
         with:
-          registry: docker.io
-          repository: myuser/galaxy-ngs
+          registry: ${{ env.IMAGE_REGISTRY }}
+          repository: ${{ env.IMAGE_REPOSITORY }}
+          tags: ci-${{ github.sha }}
+          tool-file: ${{ env.TOOL_FILE }}
+          base-image: ${{ env.GALAXY_BASE_IMAGE }}
+          push: false
+
+  release:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build and push image
+        uses: bgruening/docker-galaxy-github-action@v1
+        with:
+          registry: ${{ env.IMAGE_REGISTRY }}
+          repository: ${{ env.IMAGE_REPOSITORY }}
+          push: true
+          tool-file: ${{ env.TOOL_FILE }}
+          base-image: ${{ env.GALAXY_BASE_IMAGE }}
+          username: '$oauthtoken'
+          password: ${{ secrets.QUAY_OAUTH_TOKEN }}
           tags: |
+            ${{ github.event.release.tag_name }}
             latest
-            ${{ github.sha }}
-          tool-file: ngs_preprocessing.yml
-          base-image: quay.io/bgruening/galaxy:25.1.1
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
 ```
 
 Notes:
